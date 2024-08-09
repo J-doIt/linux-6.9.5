@@ -4020,9 +4020,10 @@ done:
 	return err;
 }
 
-/* Build a SYN and send it off. */
+/* Build a SYN and send it off.（建立一个SYN并发送出去。） */
 int tcp_connect(struct sock *sk)
 {
+	// 是 struct inet_connection_sock 的一个扩展，通过强制类型转换访问
 	struct tcp_sock *tp = tcp_sk(sk);
 	struct sk_buff *buff;
 	int err;
@@ -4090,6 +4091,7 @@ int tcp_connect(struct sock *sk)
 	if (unlikely(!buff))
 		return -ENOBUFS;
 
+	// 初始化一个 SYN 包
 	tcp_init_nondata_skb(buff, tp->write_seq++, TCPHDR_SYN);
 	tcp_mstamp_refresh(tp);
 	tp->retrans_stamp = tcp_time_stamp_ts(tp);
@@ -4098,6 +4100,7 @@ int tcp_connect(struct sock *sk)
 	tcp_rbtree_insert(&sk->tcp_rtx_queue, buff);
 
 	/* Send off SYN; include data in Fast Open. */
+	// tcp_transmit_skb 将 SYN 包发送出去
 	err = tp->fastopen_req ? tcp_send_syn_data(sk, buff) :
 	      tcp_transmit_skb(sk, buff, 1, sk->sk_allocation);
 	if (err == -ECONNREFUSED)
@@ -4116,6 +4119,7 @@ int tcp_connect(struct sock *sk)
 	TCP_INC_STATS(sock_net(sk), TCP_MIB_ACTIVEOPENS);
 
 	/* Timer for repeating the SYN until an answer. */
+	// inet_csk_reset_xmit_timer 设置了一个 timer，如果 SYN 发送不成功，则再次发送。
 	inet_csk_reset_xmit_timer(sk, ICSK_TIME_RETRANS,
 				  inet_csk(sk)->icsk_rto, TCP_RTO_MAX);
 	return 0;

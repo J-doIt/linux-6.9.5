@@ -231,7 +231,7 @@ struct proto_ops {
 struct net_proto_family {
 	int		family;
 	int		(*create)(struct net *net, struct socket *sock,
-				  int protocol, int kern);
+				  int protocol, int kern);  // 定义了一个名为create的操作，其功能是创建一个新的套接字（socket）并将其与特定的网络协议关联。
 	struct module	*owner;
 };
 

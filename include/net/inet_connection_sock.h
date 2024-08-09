@@ -54,6 +54,10 @@ struct inet_connection_sock_af_ops {
 };
 
 /** inet_connection_sock - INET connection oriented sock
+ * 
+ * struct inet_connection_sock 结构比较复杂。
+ * 有各种状态的队列，各种超时时间、拥塞控制等字眼。
+ * 我们说 TCP 是面向连接的，就是客户端和服务端都是有一个结构维护连接的状态，就是指这个结构。
  *
  * @icsk_accept_queue:	   FIFO of established children
  * @icsk_bind_hash:	   Bind node
@@ -82,6 +86,7 @@ struct inet_connection_sock_af_ops {
 struct inet_connection_sock {
 	/* inet_sock has to be the first member! */
 	struct inet_sock	  icsk_inet;
+	// 为每个 Socket 维护的，已经建立了连接的队列，这时候连接三次握手已经完毕，处于 established 状态。
 	struct request_sock_queue icsk_accept_queue;
 	struct inet_bind_bucket	  *icsk_bind_hash;
 	struct inet_bind2_bucket  *icsk_bind2_hash;

@@ -189,6 +189,8 @@ static inline bool tcp_rsk_used_ao(const struct request_sock *req)
 
 #define TCP_RMEM_TO_WIN_SCALE 8
 
+// 他是 struct inet_connection_sock 的一个扩展，struct inet_connection_sock 在 struct tcp_sock 开头的位置，通过强制类型转换访问，故伎重演又一次。
+// struct tcp_sock 里面维护了更多的 TCP 的状态。
 struct tcp_sock {
 	/* Cacheline organization can be found documented in
 	 * Documentation/networking/net_cachelines/tcp_sock.rst.

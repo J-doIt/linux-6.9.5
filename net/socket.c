@@ -1501,7 +1501,7 @@ int __sock_create(struct net *net, int family, int type, int protocol,
 			 struct socket **res, int kern)
 {
 	int err;
-	struct socket *sock;
+	struct socket *sock;  // 分配了一个 struct socket 结构
 	const struct net_proto_family *pf;
 
 	/*
@@ -1553,7 +1553,7 @@ int __sock_create(struct net *net, int family, int type, int protocol,
 #endif
 
 	rcu_read_lock();
-	pf = rcu_dereference(net_families[family]);
+	pf = rcu_dereference(net_families[family]); // net_families 数组，我们可以以 family 参数为下标，找到对应的 struct net_proto_family
 	err = -EAFNOSUPPORT;
 	if (!pf)
 		goto out_release;
@@ -1836,14 +1836,17 @@ int __sys_bind(int fd, struct sockaddr __user *umyaddr, int addrlen)
 	struct sockaddr_storage address;
 	int err, fput_needed;
 
+	// 根据 fd 文件描述符，找到 struct socket 结构
 	sock = sockfd_lookup_light(fd, &err, &fput_needed);
 	if (sock) {
+		// 将 sockaddr 从用户态拷贝到内核态
 		err = move_addr_to_kernel(umyaddr, addrlen, &address);
 		if (!err) {
 			err = security_socket_bind(sock,
 						   (struct sockaddr *)&address,
 						   addrlen);
 			if (!err)
+				// 调用 struct socket 结构里面 ops 的 bind 函数
 				err = READ_ONCE(sock->ops)->bind(sock,
 						      (struct sockaddr *)
 						      &address, addrlen);
@@ -1855,6 +1858,7 @@ int __sys_bind(int fd, struct sockaddr __user *umyaddr, int addrlen)
 
 SYSCALL_DEFINE3(bind, int, fd, struct sockaddr __user *, umyaddr, int, addrlen)
 {
+	//
 	return __sys_bind(fd, umyaddr, addrlen);
 }
 
@@ -1870,6 +1874,7 @@ int __sys_listen(int fd, int backlog)
 	int err, fput_needed;
 	int somaxconn;
 
+	// 通过 sockfd_lookup_light，根据 fd 文件描述符，找到 struct socket 结构。
 	sock = sockfd_lookup_light(fd, &err, &fput_needed);
 	if (sock) {
 		somaxconn = READ_ONCE(sock_net(sock->sk)->core.sysctl_somaxconn);
@@ -1878,6 +1883,7 @@ int __sys_listen(int fd, int backlog)
 
 		err = security_socket_listen(sock, backlog);
 		if (!err)
+			// 调用 struct socket 结构里面 ops 的 listen 函数。
 			err = READ_ONCE(sock->ops)->listen(sock, backlog);
 
 		fput_light(sock->file, fput_needed);
@@ -1887,6 +1893,7 @@ int __sys_listen(int fd, int backlog)
 
 SYSCALL_DEFINE2(listen, int, fd, int, backlog)
 {
+	//
 	return __sys_listen(fd, backlog);
 }
 
@@ -1900,10 +1907,13 @@ struct file *do_accept(struct file *file, unsigned file_flags,
 	struct sockaddr_storage address;
 	const struct proto_ops *ops;
 
+	// 找到原来的 struct socket（"监听 socket"），并基于它去创建一个新的 newsock（"连接 socket"）
 	sock = sock_from_file(file);
 	if (!sock)
 		return ERR_PTR(-ENOTSOCK);
 
+	// 为 newsock 申请内存
+	// 基于 "监听 socket" 去创建一个新的 newsock（也就是 "连接 socket"）
 	newsock = sock_alloc();
 	if (!newsock)
 		return ERR_PTR(-ENFILE);
@@ -1918,6 +1928,7 @@ struct file *do_accept(struct file *file, unsigned file_flags,
 	 */
 	__module_get(ops->owner);
 
+	// 创建一个新的 struct file 和 fd，并关联到 socket。
 	newfile = sock_alloc_file(newsock, flags, sock->sk->sk_prot_creator->name);
 	if (IS_ERR(newfile))
 		return newfile;
@@ -1926,6 +1937,7 @@ struct file *do_accept(struct file *file, unsigned file_flags,
 	if (err)
 		goto out_fd;
 
+	// 调用 struct socket 的 sock->ops->accept
 	err = ops->accept(sock, newsock, sock->file->f_flags | file_flags,
 					false);
 	if (err < 0)
@@ -1966,12 +1978,14 @@ static int __sys_accept4_file(struct file *file, struct sockaddr __user *upeer_s
 	if (unlikely(newfd < 0))
 		return newfd;
 
+	// 
 	newfile = do_accept(file, 0, upeer_sockaddr, upeer_addrlen,
 			    flags);
 	if (IS_ERR(newfile)) {
 		put_unused_fd(newfd);
 		return PTR_ERR(newfile);
 	}
+	//
 	fd_install(newfd, newfile);
 	return newfd;
 }
@@ -1996,6 +2010,7 @@ int __sys_accept4(int fd, struct sockaddr __user *upeer_sockaddr,
 
 	f = fdget(fd);
 	if (f.file) {
+		// 
 		ret = __sys_accept4_file(f.file, upeer_sockaddr,
 					 upeer_addrlen, flags);
 		fdput(f);
@@ -2010,6 +2025,7 @@ SYSCALL_DEFINE4(accept4, int, fd, struct sockaddr __user *, upeer_sockaddr,
 	return __sys_accept4(fd, upeer_sockaddr, upeer_addrlen, flags);
 }
 
+//
 SYSCALL_DEFINE3(accept, int, fd, struct sockaddr __user *, upeer_sockaddr,
 		int __user *, upeer_addrlen)
 {
@@ -2045,6 +2061,7 @@ int __sys_connect_file(struct file *file, struct sockaddr_storage *address,
 	if (err)
 		goto out;
 
+	// 调用 struct socket 结构里面 ops 的 connect 函数
 	err = READ_ONCE(sock->ops)->connect(sock, (struct sockaddr *)address,
 				addrlen, sock->file->f_flags | file_flags);
 out:
@@ -2056,12 +2073,15 @@ int __sys_connect(int fd, struct sockaddr __user *uservaddr, int addrlen)
 	int ret = -EBADF;
 	struct fd f;
 
+	//
 	f = fdget(fd);
 	if (f.file) {
 		struct sockaddr_storage address;
 
+		//
 		ret = move_addr_to_kernel(uservaddr, addrlen, &address);
 		if (!ret)
+			// 
 			ret = __sys_connect_file(f.file, &address, addrlen, 0);
 		fdput(f);
 	}
@@ -2069,6 +2089,7 @@ int __sys_connect(int fd, struct sockaddr __user *uservaddr, int addrlen)
 	return ret;
 }
 
+// 三次握手一般是由客户端调用 connect 发起。
 SYSCALL_DEFINE3(connect, int, fd, struct sockaddr __user *, uservaddr,
 		int, addrlen)
 {

@@ -203,7 +203,7 @@ static int tcp_v4_pre_connect(struct sock *sk, struct sockaddr *uaddr,
 	return BPF_CGROUP_RUN_PROG_INET4_CONNECT(sk, uaddr, &addr_len);
 }
 
-/* This will initiate an outgoing connection. */
+/* This will initiate an outgoing connection.（） */
 int tcp_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 {
 	struct sockaddr_in *usin = (struct sockaddr_in *)uaddr;
@@ -236,6 +236,10 @@ int tcp_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	orig_sport = inet->inet_sport;
 	orig_dport = usin->sin_port;
 	fl4 = &inet->cork.fl.u.ip4;
+	// ip_route_connect 其实是做一个路由的选择。
+	// 为什么呢？因为三次握手马上就要发送一个 SYN 包了，这就要凑齐源地址、源端口、目标地址、目标端口。
+	// 目标地址和目标端口是服务端的，已经知道源端口是客户端随机分配的，
+	// 源地址应该用哪一个呢？这时候要选择一条路由，看从哪个网卡出去，就应该填写哪个网卡的 IP 地址。
 	rt = ip_route_connect(fl4, nexthop, inet->inet_saddr,
 			      sk->sk_bound_dev_if, IPPROTO_TCP, orig_sport,
 			      orig_dport, sk);
@@ -288,6 +292,7 @@ int tcp_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	 * lock select source port, enter ourselves into the hash tables and
 	 * complete initialization after this.
 	 */
+	// 在发送 SYN 之前，先将客户端 socket 的状态设置为 TCP_SYN_SENT。
 	tcp_set_state(sk, TCP_SYN_SENT);
 	err = inet_hash_connect(tcp_death_row, sk);
 	if (err)
@@ -310,6 +315,7 @@ int tcp_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 
 	if (likely(!tp->repair)) {
 		if (!tp->write_seq)
+			// 初始化 TCP 的 seq num，也即 write_seq
 			WRITE_ONCE(tp->write_seq,
 				   secure_tcp_seq(inet->inet_saddr,
 						  inet->inet_daddr,
@@ -327,6 +333,7 @@ int tcp_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	if (err)
 		goto failure;
 
+	// 调用 tcp_connect 进行发送
 	err = tcp_connect(sk);
 
 	if (err)
@@ -1165,6 +1172,8 @@ static void tcp_v4_reqsk_send_ack(const struct sock *sk, struct sk_buff *skb,
  *	Send a SYN-ACK after having received a SYN.
  *	This still operates on a request_sock only, not on a big
  *	socket.
+ *
+ *  收到了 SYN 后，回复一个 SYN-ACK，回复完毕后，服务端处于 TCP_SYN_RECV。
  */
 static int tcp_v4_send_synack(const struct sock *sk, struct dst_entry *dst,
 			      struct flowi *fl,
@@ -1710,7 +1719,7 @@ const struct tcp_request_sock_ops tcp_request_sock_ipv4_ops = {
 	.route_req	=	tcp_v4_route_req,
 	.init_seq	=	tcp_v4_init_seq,
 	.init_ts_off	=	tcp_v4_init_ts_off,
-	.send_synack	=	tcp_v4_send_synack,
+	.send_synack	=	tcp_v4_send_synack, //
 };
 
 int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb)
@@ -1719,6 +1728,7 @@ int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb)
 	if (skb_rtable(skb)->rt_flags & (RTCF_BROADCAST | RTCF_MULTICAST))
 		goto drop;
 
+	// 
 	return tcp_conn_request(&tcp_request_sock_ops,
 				&tcp_request_sock_ipv4_ops, sk, skb);
 
@@ -1932,6 +1942,7 @@ int tcp_v4_do_rcv(struct sock *sk, struct sk_buff *skb)
 	} else
 		sock_rps_save_rxhash(sk, skb);
 
+	// 
 	reason = tcp_rcv_state_process(sk, skb);
 	if (reason) {
 		rsk = sk;
@@ -2172,6 +2183,7 @@ static void tcp_v4_fill_cb(struct sk_buff *skb, const struct iphdr *iph,
 
 /*
  *	From tcp_input.c
+ *  
  */
 
 int tcp_v4_rcv(struct sk_buff *skb)
@@ -2334,6 +2346,7 @@ process:
 	skb->dev = NULL;
 
 	if (sk->sk_state == TCP_LISTEN) {
+		//
 		ret = tcp_v4_do_rcv(sk, skb);
 		goto put_and_return;
 	}
@@ -2453,7 +2466,7 @@ const struct inet_connection_sock_af_ops ipv4_specific = {
 	.send_check	   = tcp_v4_send_check,
 	.rebuild_header	   = inet_sk_rebuild_header,
 	.sk_rx_dst_set	   = inet_sk_rx_dst_set,
-	.conn_request	   = tcp_v4_conn_request,
+	.conn_request	   = tcp_v4_conn_request, // 
 	.syn_recv_sock	   = tcp_v4_syn_recv_sock,
 	.net_header_len	   = sizeof(struct iphdr),
 	.setsockopt	   = ip_setsockopt,

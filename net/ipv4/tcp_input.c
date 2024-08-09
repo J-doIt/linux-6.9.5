@@ -6478,6 +6478,7 @@ consume:
 						  TCP_DELACK_MAX, TCP_RTO_MAX);
 			goto consume;
 		}
+		// 
 		tcp_send_ack(sk);
 		return -1;
 	}
@@ -6619,6 +6620,8 @@ static void tcp_rcv_synrecv_state_fastopen(struct sock *sk)
  *	address independent.
  */
 
+// 处理接收一个网络包后引起状态变化的
+// 目前服务端是处于 TCP_LISTEN 状态的，而且发过来的包是 SYN。
 enum skb_drop_reason
 tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb)
 {
@@ -6634,6 +6637,7 @@ tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb)
 		SKB_DR_SET(reason, TCP_CLOSE);
 		goto discard;
 
+	// TCP_LISTEN 状态
 	case TCP_LISTEN:
 		if (th->ack)
 			return SKB_DROP_REASON_TCP_FLAGS;
@@ -6652,6 +6656,7 @@ tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb)
 			 */
 			rcu_read_lock();
 			local_bh_disable();
+			// 
 			icsk->icsk_af_ops->conn_request(sk, skb);
 			local_bh_enable();
 			rcu_read_unlock();
@@ -6662,9 +6667,11 @@ tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb)
 		SKB_DR_SET(reason, TCP_FLAGS);
 		goto discard;
 
+	// TCP_SYN_SENT 状态
 	case TCP_SYN_SENT:
 		tp->rx_opt.saw_tstamp = 0;
 		tcp_mstamp_refresh(tp);
+		// 
 		queued = tcp_rcv_synsent_state_process(sk, skb, th);
 		if (queued >= 0)
 			return queued;
@@ -7097,6 +7104,7 @@ u16 tcp_get_syncookie_mss(struct request_sock_ops *rsk_ops,
 }
 EXPORT_SYMBOL_GPL(tcp_get_syncookie_mss);
 
+//
 int tcp_conn_request(struct request_sock_ops *rsk_ops,
 		     const struct tcp_request_sock_ops *af_ops,
 		     struct sock *sk, struct sk_buff *skb)
@@ -7244,6 +7252,7 @@ int tcp_conn_request(struct request_sock_ops *rsk_ops,
 			req->timeout = tcp_timeout_init((struct sock *)req);
 			inet_csk_reqsk_queue_hash_add(sk, req, req->timeout);
 		}
+		// 
 		af_ops->send_synack(sk, dst, &fl, req, &foc,
 				    !want_cookie ? TCP_SYNACK_NORMAL :
 						   TCP_SYNACK_COOKIE,

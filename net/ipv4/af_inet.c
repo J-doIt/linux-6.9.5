@@ -126,7 +126,7 @@
 /* The inetsw table contains everything that inet_create needs to
  * build a new socket.
  */
-static struct list_head inetsw[SOCK_MAX];
+static struct list_head inetsw[SOCK_MAX]; //
 static DEFINE_SPINLOCK(inetsw_lock);
 
 /* New destruction routine */
@@ -215,6 +215,7 @@ int __inet_listen_sk(struct sock *sk, int backlog)
 			tcp_fastopen_init_key_once(sock_net(sk));
 		}
 
+		// 如果这个 socket 还不在 TCP_LISTEN 状态，会调用 inet_csk_listen_start 进入监听状态。
 		err = inet_csk_listen_start(sk);
 		if (err)
 			return err;
@@ -226,6 +227,7 @@ int __inet_listen_sk(struct sock *sk, int backlog)
 
 /*
  *	Move a socket into listening state.
+ *  ..
  */
 int inet_listen(struct socket *sock, int backlog)
 {
@@ -236,7 +238,7 @@ int inet_listen(struct socket *sock, int backlog)
 
 	if (sock->state != SS_UNCONNECTED || sock->type != SOCK_STREAM)
 		goto out;
-
+	// listen
 	err = __inet_listen_sk(sk, backlog);
 
 out:
@@ -269,6 +271,12 @@ static int inet_create(struct net *net, struct socket *sock, int protocol,
 lookup_protocol:
 	err = -ESOCKTNOSUPPORT;
 	rcu_read_lock();
+	// inetsw 数组是在系统初始化的时候初始化的;
+	// 一个 type 类型会包含多个 protocol，因而我们需要一个链表;
+
+	// 在 inetsw 数组中，根据 type 找到属于这个类型的列表，
+	// 然后依次比较列表中的 struct inet_protosw 的 protocol 是不是用户指定的 protocol；
+	// 如果是，就得到了符合用户指定的 family->type->protocol 的 struct inet_protosw *answer 对象。
 	list_for_each_entry_rcu(answer, &inetsw[sock->type], list) {
 
 		err = 0;
@@ -315,6 +323,9 @@ lookup_protocol:
 	    !ns_capable(net->user_ns, CAP_NET_RAW))
 		goto out_rcu_unlock;
 
+	// 接下来，struct socket *sock 的 ops 成员变量，被赋值为 answer 的 ops。
+	// 对于 TCP 来讲，就是 inet_stream_ops。
+	// 后面任何用户对于这个 socket 的操作，都是通过 inet_stream_ops 进行的。
 	sock->ops = answer->ops;
 	answer_prot = answer->prot;
 	answer_flags = answer->flags;
@@ -323,6 +334,9 @@ lookup_protocol:
 	WARN_ON(!answer_prot->slab);
 
 	err = -ENOMEM;
+	// 创建一个 struct sock *sk 对象。
+	// socket 和 sock 看起来几乎一样，容易让人混淆，这里需要说明一下：
+	// socket 是用于负责对上给用户提供接口，并且和文件系统关联。而 sock，负责向下对接内核网络协议栈。
 	sk = sk_alloc(net, PF_INET, GFP_KERNEL, answer_prot, kern);
 	if (!sk)
 		goto out;
@@ -334,6 +348,7 @@ lookup_protocol:
 	if (INET_PROTOSW_ICSK & answer_flags)
 		inet_init_csk_locks(sk);
 
+	// 创建一个 struct inet_sock 结构，这个结构一开始就是 struct sock，然后扩展了一些其他的信息，剩下的代码就填充这些信息。
 	inet = inet_sk(sk);
 	inet_assign_bit(IS_ICSK, sk, INET_PROTOSW_ICSK & answer_flags);
 
@@ -461,9 +476,11 @@ int inet_bind_sk(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	if (err)
 		return err;
 
+	//
 	return __inet_bind(sk, uaddr, addr_len, flags);
 }
 
+//
 int inet_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 {
 	return inet_bind_sk(sock->sk, uaddr, addr_len);
@@ -535,6 +552,8 @@ int __inet_bind(struct sock *sk, struct sockaddr *uaddr, int addr_len,
 	/* Make sure we are allowed to bind here. */
 	if (snum || !(inet_test_bit(BIND_ADDRESS_NO_PORT, sk) ||
 		      (flags & BIND_FORCE_ADDRESS_NO_PORT))) {
+		// 调用 sk_prot 的 get_port 函数，也即 inet_csk_get_port 来检查端口是否冲突，是否可以绑定。
+		// 如果允许，则会设置 struct inet_sock 的本方的地址 inet_saddr 和本方的端口 inet_sport，对方的地址 inet_daddr 和对方的端口 inet_dport 都初始化为 0。
 		err = sk->sk_prot->get_port(sk, snum);
 		if (err) {
 			inet->inet_saddr = inet->inet_rcv_saddr = 0;
@@ -622,6 +641,7 @@ static long inet_wait_for_connect(struct sock *sk, long timeo, int writebias)
 /*
  *	Connect to a remote host. There is regrettably still a little
  *	TCP 'magic' in here.
+ *  连接到远程主机。
  */
 int __inet_stream_connect(struct socket *sock, struct sockaddr *uaddr,
 			  int addr_len, int flags, int is_sendmsg)
@@ -665,6 +685,7 @@ int __inet_stream_connect(struct socket *sock, struct sockaddr *uaddr,
 			err = -EALREADY;
 		/* Fall out of switch with err, set for this state */
 		break;
+	// 如果 socket 处于 SS_UNCONNECTED 状态：
 	case SS_UNCONNECTED:
 		err = -EISCONN;
 		if (sk->sk_state != TCP_CLOSE)
@@ -676,6 +697,7 @@ int __inet_stream_connect(struct socket *sock, struct sockaddr *uaddr,
 				goto out;
 		}
 
+		// 调用 struct sock 的 sk->sk_prot->connect
 		err = sk->sk_prot->connect(sk, uaddr, addr_len);
 		if (err < 0)
 			goto out;
@@ -780,6 +802,7 @@ int inet_accept(struct socket *sock, struct socket *newsock, int flags,
 	int err = -EINVAL;
 
 	/* IPV6_ADDRFORM can change sk->sk_prot under us. */
+	// 调用 struct sock 的 sk1->sk_prot->accept
 	sk2 = READ_ONCE(sk1->sk_prot)->accept(sk1, flags, &err, kern);
 	if (!sk2)
 		return err;
@@ -1144,7 +1167,7 @@ static const struct proto_ops inet_sockraw_ops = {
 
 static const struct net_proto_family inet_family_ops = {
 	.family = PF_INET,
-	.create = inet_create,
+	.create = inet_create, // 这个用于socket系统调用创建
 	.owner	= THIS_MODULE,
 };
 
@@ -1941,6 +1964,7 @@ static struct packet_type ip_packet_type __read_mostly = {
 	.list_func = ip_list_rcv,
 };
 
+//
 static int __init inet_init(void)
 {
 	struct inet_protosw *q;
@@ -1992,8 +2016,9 @@ static int __init inet_init(void)
 	if (inet_add_protocol(&net_hotdata.udp_protocol, IPPROTO_UDP) < 0)
 		pr_crit("%s: Cannot add UDP protocol\n", __func__);
 
+	// 
 	net_hotdata.tcp_protocol = (struct net_protocol) {
-		.handler	=	tcp_v4_rcv,
+		.handler	=	tcp_v4_rcv, // 
 		.err_handler	=	tcp_v4_err,
 		.no_policy	=	1,
 		.icmp_strict_tag_validation = 1,
@@ -2006,9 +2031,13 @@ static int __init inet_init(void)
 #endif
 
 	/* Register the socket-side information for inet_create. */
+
+	// 一个循环会将 inetsw 数组的每一项，都初始化为一个链表。
+	// 一个 type 类型会包含多个 protocol，因而需要一个链表。
 	for (r = &inetsw[0]; r < &inetsw[SOCK_MAX]; ++r)
 		INIT_LIST_HEAD(r);
 
+	// 接下来一个循环，是将 inetsw_array 注册到 inetsw 数组里面去。
 	for (q = inetsw_array; q < &inetsw_array[INETSW_ARRAY_LEN]; ++q)
 		inet_register_protosw(q);
 

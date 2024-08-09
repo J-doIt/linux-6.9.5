@@ -637,17 +637,21 @@ static int inet_csk_wait_for_connect(struct sock *sk, long timeo)
 		prepare_to_wait_exclusive(sk_sleep(sk), &wait,
 					  TASK_INTERRUPTIBLE);
 		release_sock(sk);
+		// 判断 icsk_accept_queue 是否为空
 		if (reqsk_queue_empty(&icsk->icsk_accept_queue))
+			// 等待的时候，调用 schedule_timeout，让出 CPU，并且将进程状态设置为 TASK_INTERRUPTIBLE。
 			timeo = schedule_timeout(timeo);
 		sched_annotate_sleep();
 		lock_sock(sk);
 		err = 0;
+		// 如果再次 CPU 醒来，我们会接着判断 icsk_accept_queue 是否为空
 		if (!reqsk_queue_empty(&icsk->icsk_accept_queue))
 			break;
 		err = -EINVAL;
 		if (sk->sk_state != TCP_LISTEN)
 			break;
 		err = sock_intr_errno(timeo);
+		// 用 signal_pending 看有没有信号可以处理
 		if (signal_pending(current))
 			break;
 		err = -EAGAIN;
@@ -679,6 +683,7 @@ struct sock *inet_csk_accept(struct sock *sk, int flags, int *err, bool kern)
 		goto out_err;
 
 	/* Find already established connection */
+	// 如果 icsk_accept_queue 为空
 	if (reqsk_queue_empty(queue)) {
 		long timeo = sock_rcvtimeo(sk, flags & O_NONBLOCK);
 
@@ -687,10 +692,13 @@ struct sock *inet_csk_accept(struct sock *sk, int flags, int *err, bool kern)
 		if (!timeo)
 			goto out_err;
 
+		// 调用 inet_csk_wait_for_connect 进行等待
 		error = inet_csk_wait_for_connect(sk, timeo);
 		if (error)
 			goto out_err;
 	}
+	// 一旦 icsk_accept_queue 不为空，就从 inet_csk_wait_for_connect 中返回，
+	// 在队列中取出一个 struct sock 对象赋值给 newsk。
 	req = reqsk_queue_remove(queue, sk);
 	newsk = req->sk;
 
@@ -1259,6 +1267,8 @@ static int inet_ulp_can_listen(const struct sock *sk)
 
 int inet_csk_listen_start(struct sock *sk)
 {
+	// 这里面建立了一个新的结构 inet_connection_sock，
+	// 这个结构一开始是 struct inet_sock，inet_csk 其实做了一次强制类型转换，扩大了结构
 	struct inet_connection_sock *icsk = inet_csk(sk);
 	struct inet_sock *inet = inet_sk(sk);
 	int err;
@@ -1267,6 +1277,7 @@ int inet_csk_listen_start(struct sock *sk)
 	if (unlikely(err))
 		return err;
 
+	// inet_connection_sock 的 icsk_accept_queue
 	reqsk_queue_alloc(&icsk->icsk_accept_queue);
 
 	sk->sk_ack_backlog = 0;
@@ -1277,7 +1288,9 @@ int inet_csk_listen_start(struct sock *sk)
 	 * It is OK, because this socket enters to hash table only
 	 * after validation is complete.
 	 */
+	// 初始化完之后，将 TCP 的状态设置为 TCP_LISTEN，
 	inet_sk_state_store(sk, TCP_LISTEN);
+	// 再次调用 get_port 判断端口是否冲突。
 	err = sk->sk_prot->get_port(sk, inet->inet_num);
 	if (!err) {
 		inet->inet_sport = htons(inet->inet_num);
