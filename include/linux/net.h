@@ -122,8 +122,8 @@ struct socket {
 	unsigned long		flags;
 
 	struct file		*file;
-	struct sock		*sk;
-	const struct proto_ops	*ops; /* Might change with IPV6_ADDRFORM or MPTCP. */
+	struct sock		*sk; // 
+	const struct proto_ops	*ops; /* Might change with IPV6_ADDRFORM or MPTCP. */ // 
 
 	struct socket_wq	wq;
 };

@@ -866,6 +866,7 @@ int inet_send_prepare(struct sock *sk)
 }
 EXPORT_SYMBOL_GPL(inet_send_prepare);
 
+// 
 int inet_sendmsg(struct socket *sock, struct msghdr *msg, size_t size)
 {
 	struct sock *sk = sock->sk;
@@ -873,6 +874,7 @@ int inet_sendmsg(struct socket *sock, struct msghdr *msg, size_t size)
 	if (unlikely(inet_send_prepare(sk)))
 		return -EAGAIN;
 
+	// 调用 sk_prot 的 sendmsg 方法
 	return INDIRECT_CALL_2(sk->sk_prot->sendmsg, tcp_sendmsg, udp_sendmsg,
 			       sk, msg, size);
 }

@@ -150,12 +150,13 @@ static void sock_show_fdinfo(struct seq_file *m, struct file *f)
  *	Socket files have a set of 'special' operations as well as the generic file ones. These don't appear
  *	in the operation structures but are done directly via the socketcall() multiplexor.
  */
-
+// 对于每一个打开的文件都有一个 struct file 结构。
+// 对于 socket 来讲，它的 file_operations 定义如下：
 static const struct file_operations socket_file_ops = {
 	.owner =	THIS_MODULE,
 	.llseek =	no_llseek,
 	.read_iter =	sock_read_iter,
-	.write_iter =	sock_write_iter,
+	.write_iter =	sock_write_iter, //
 	.poll =		sock_poll,
 	.unlocked_ioctl = sock_ioctl,
 #ifdef CONFIG_COMPAT
@@ -727,6 +728,7 @@ static noinline void call_trace_sock_send_length(struct sock *sk, int ret,
 
 static inline int sock_sendmsg_nosec(struct socket *sock, struct msghdr *msg)
 {
+	// sock->ops->sendmsg
 	int ret = INDIRECT_CALL_INET(READ_ONCE(sock->ops)->sendmsg, inet6_sendmsg,
 				     inet_sendmsg, sock, msg,
 				     msg_data_left(msg));
@@ -742,6 +744,7 @@ static int __sock_sendmsg(struct socket *sock, struct msghdr *msg)
 	int err = security_socket_sendmsg(sock, msg,
 					  msg_data_left(msg));
 
+	// 
 	return err ?: sock_sendmsg_nosec(sock, msg);
 }
 
@@ -1143,6 +1146,7 @@ static ssize_t sock_read_iter(struct kiocb *iocb, struct iov_iter *to)
 static ssize_t sock_write_iter(struct kiocb *iocb, struct iov_iter *from)
 {
 	struct file *file = iocb->ki_filp;
+	// 通过 VFS 中的 struct file，将创建好的 socket 结构拿出来，
 	struct socket *sock = file->private_data;
 	struct msghdr msg = {.msg_iter = *from,
 			     .msg_iocb = iocb};
@@ -1157,6 +1161,7 @@ static ssize_t sock_write_iter(struct kiocb *iocb, struct iov_iter *from)
 	if (sock->type == SOCK_SEQPACKET)
 		msg.msg_flags |= MSG_EOR;
 
+	// 然后调用 sock_sendmsg。
 	res = __sock_sendmsg(sock, &msg);
 	*from = msg.msg_iter;
 	return res;
