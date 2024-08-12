@@ -1038,11 +1038,12 @@ int tcp_sendmsg_fastopen(struct sock *sk, struct msghdr *msg, int *copied,
 
 int tcp_sendmsg_locked(struct sock *sk, struct msghdr *msg, size_t size)
 {
+	// 首先，通过强制类型转换，将 sock 结构转换为 struct tcp_sock，这个是维护 TCP 连接状态的重要数据结构。
 	struct tcp_sock *tp = tcp_sk(sk);
 	struct ubuf_info *uarg = NULL;
 	struct sk_buff *skb;
 	struct sockcm_cookie sockc;
-	int flags, err, copied = 0;
+	int flags, err, copied = 0; // 声明一个变量 copied，初始化为 0，这表示拷贝了多少数据.
 	int mss_now = 0, size_goal, copied_syn = 0;
 	int process_backlog = 0;
 	int zc = 0;
@@ -1126,19 +1127,29 @@ int tcp_sendmsg_locked(struct sock *sk, struct msghdr *msg, size_t size)
 	copied = 0;
 
 restart:
+	// 第一步，
+  	// 计算 MSS，也即 Max Segment Size。这限制在网络上传输的网络包的大小。
 	mss_now = tcp_send_mss(sk, &size_goal, flags);
 
 	err = -EPIPE;
 	if (sk->sk_err || (sk->sk_shutdown & SEND_SHUTDOWN))
 		goto do_error;
 
+	// 如果用户的数据没有发送完毕，就一直循环.
 	while (msg_data_left(msg)) {
+		// 声明一个 copy 变量，表示这次拷贝的数值.
 		ssize_t copy = 0;
 
+		// 第二步，
+		// tcp_write_queue_tail 从 TCP 写入队列 sk_write_queue 中拿出最后一个 struct sk_buff，
+		// 在这个写入队列中排满了要发送的 struct sk_buff，
+		// 为什么要拿最后一个呢？这里面只有最后一个，可能会因为上次用户给的数据太少，而没有填满。
 		skb = tcp_write_queue_tail(sk);
 		if (skb)
 			copy = size_goal - skb->len;
 
+		// 第三步，
+    	// 如果 copy 小于 0，说明最后一个 struct sk_buff 已经没地方存放了，
 		if (copy <= 0 || !tcp_skb_can_collapse_to(skb)) {
 			bool first_skb;
 
@@ -1152,6 +1163,7 @@ new_segment:
 					goto restart;
 			}
 			first_skb = tcp_rtx_and_write_queues_empty(sk);
+			// 需要调用 tcp_stream_alloc_skb ，重新分配 struct sk_buff，
 			skb = tcp_stream_alloc_skb(sk, sk->sk_allocation,
 						   first_skb);
 			if (!skb)
@@ -1159,6 +1171,7 @@ new_segment:
 
 			process_backlog++;
 
+			// 然后调用 tcp_skb_entail ，将新分配的 sk_buff 放到队列尾部。
 			tcp_skb_entail(sk, skb);
 			copy = size_goal;
 
@@ -1203,6 +1216,7 @@ new_segment:
 			if (!copy)
 				goto wait_for_space;
 
+			// skb_copy_to_page_nocache：将数据拷贝到 struct skb_shared_info 结构指向的不需要连续的页面区域。
 			err = skb_copy_to_page_nocache(sk, &msg->msg_iter, skb,
 						       pfrag->page,
 						       pfrag->offset,
@@ -1273,6 +1287,7 @@ new_segment:
 		TCP_SKB_CB(skb)->end_seq += copy;
 		tcp_skb_pcount_set(skb, 0);
 
+		// 将每次拷贝的数量都加起来
 		copied += copy;
 		if (!msg_data_left(msg)) {
 			if (unlikely(flags & MSG_EOR))
@@ -1283,10 +1298,13 @@ new_segment:
 		if (skb->len < size_goal || (flags & MSG_OOB) || unlikely(tp->repair))
 			continue;
 
+		// 第五步，就是要发生网络包了。
 		if (forced_push(tp)) {
 			tcp_mark_push(tp, skb);
+			// 情况一：积累的数据报数目太多了，需要通过调用 __tcp_push_pending_frames 发送网络包
 			__tcp_push_pending_frames(sk, mss_now, TCP_NAGLE_PUSH);
 		} else if (skb == tcp_send_head(sk))
+			// 情况二：第一个网络包，需要马上发送，调用 tcp_push_one。
 			tcp_push_one(sk, mss_now);
 		continue;
 
@@ -1339,6 +1357,7 @@ int tcp_sendmsg(struct sock *sk, struct msghdr *msg, size_t size)
 	int ret;
 
 	lock_sock(sk);
+	// 
 	ret = tcp_sendmsg_locked(sk, msg, size);
 	release_sock(sk);
 

@@ -156,7 +156,7 @@ static const struct file_operations socket_file_ops = {
 	.owner =	THIS_MODULE,
 	.llseek =	no_llseek,
 	.read_iter =	sock_read_iter,
-	.write_iter =	sock_write_iter, //
+	.write_iter =	sock_write_iter, // 按照文件系统的写入流程，write 系统调用 调用的是 sock_write_iter。
 	.poll =		sock_poll,
 	.unlocked_ioctl = sock_ioctl,
 #ifdef CONFIG_COMPAT
@@ -729,6 +729,7 @@ static noinline void call_trace_sock_send_length(struct sock *sk, int ret,
 static inline int sock_sendmsg_nosec(struct socket *sock, struct msghdr *msg)
 {
 	// sock->ops->sendmsg
+	// 
 	int ret = INDIRECT_CALL_INET(READ_ONCE(sock->ops)->sendmsg, inet6_sendmsg,
 				     inet_sendmsg, sock, msg,
 				     msg_data_left(msg));

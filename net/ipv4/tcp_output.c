@@ -1277,6 +1277,11 @@ INDIRECT_CALLABLE_DECLARE(void tcp_v4_send_check(struct sock *sk, struct sk_buff
  *
  * We are working here with either a clone of the original
  * SKB, or a fresh unique copy made by the retransmit engine.
+ * 
+ * 主要做了两件事情：
+ * 一件事情就是填充 TCP 头。
+ * 一件事是调用 icsk_af_ops 的 queue_xmit 方法，icsk_af_ops 指向 ipv4_specific，也即调用的是 ip_queue_xmit 函数。
+ * 
  */
 static int __tcp_transmit_skb(struct sock *sk, struct sk_buff *skb,
 			      int clone_it, gfp_t gfp_mask, u32 rcv_nxt)
@@ -1373,12 +1378,12 @@ static int __tcp_transmit_skb(struct sock *sk, struct sk_buff *skb,
 
 	/* Build TCP header and checksum it. */
 	th = (struct tcphdr *)skb->data;
-	th->source		= inet->inet_sport;
-	th->dest		= inet->inet_dport;
-	th->seq			= htonl(tcb->seq);
-	th->ack_seq		= htonl(rcv_nxt);
+	th->source		= inet->inet_sport; // 源端口
+	th->dest		= inet->inet_dport; // 目标端口
+	th->seq			= htonl(tcb->seq); // 序列号
+	th->ack_seq		= htonl(rcv_nxt); // 确认序列号
 	*(((__be16 *)th) + 6)	= htons(((tcp_header_size >> 2) << 12) |
-					tcb->tcp_flags);
+					tcb->tcp_flags); // 把所有的 flags 设置为 tcb->tcp_flags
 
 	th->check		= 0;
 	th->urg_ptr		= 0;
@@ -1402,10 +1407,10 @@ static int __tcp_transmit_skb(struct sock *sk, struct sk_buff *skb,
 		/* RFC1323: The window in SYN & SYN/ACK segments
 		 * is never scaled.
 		 */
-		th->window	= htons(min(tp->rcv_wnd, 65535U));
+		th->window	= htons(min(tp->rcv_wnd, 65535U)); // 设置窗口大小为 tp->rcv_wnd。
 	}
 
-	tcp_options_write(th, tp, NULL, &opts, &key);
+	tcp_options_write(th, tp, NULL, &opts, &key); // 设置选项为 opts。
 
 	if (tcp_key_is_md5(&key)) {
 #ifdef CONFIG_TCP_MD5SIG
@@ -2737,9 +2742,12 @@ static bool tcp_write_xmit(struct sock *sk, unsigned int mss_now, int nonagle,
 		if (tcp_pacing_check(sk))
 			break;
 
+		// 计算：切分
 		tso_segs = tcp_init_tso_segs(skb, mss_now);
 		BUG_ON(!tso_segs);
 
+		// 计算：剩下的窗口大小 cwnd_quota，也即就能发送这么多了。
+   		// 也就是：将当前的 snd_cwnd，减去已经在窗口里面尚未发送完毕的网络包。
 		cwnd_quota = tcp_cwnd_test(tp, skb);
 		if (!cwnd_quota) {
 			if (push_one == 2)
@@ -2749,7 +2757,9 @@ static bool tcp_write_xmit(struct sock *sk, unsigned int mss_now, int nonagle,
 				break;
 		}
 
+		// 判断 sk_buff 中的 end_seq 和 tcp_wnd_end(tp) 之间的关系，也即这个 sk_buff 是否在滑动窗口的允许范围之内。
 		if (unlikely(!tcp_snd_wnd_test(tp, skb, mss_now))) {
+			// 如果不在范围内，说明发送要受限制了，就要把 is_rwnd_limited 设置为 true。
 			is_rwnd_limited = true;
 			break;
 		}
@@ -2768,6 +2778,8 @@ static bool tcp_write_xmit(struct sock *sk, unsigned int mss_now, int nonagle,
 
 		limit = mss_now;
 		if (tso_segs > 1 && !tcp_urg_mode(tp))
+			// 判断是否会因为超出 mss 而分段，
+			// 还会判断另一个条件，就是是否在滑动窗口的运行范围之内，如果小于窗口的大小，也需要分段，也即需要调用 tso_fragment。
 			limit = tcp_mss_split_point(sk, skb, mss_now,
 						    min_t(unsigned int,
 							  cwnd_quota,
@@ -2789,6 +2801,7 @@ static bool tcp_write_xmit(struct sock *sk, unsigned int mss_now, int nonagle,
 		if (TCP_SKB_CB(skb)->end_seq == TCP_SKB_CB(skb)->seq)
 			break;
 
+		// 调用 tcp_transmit_skb，真的去发送一个网络包。
 		if (unlikely(tcp_transmit_skb(sk, skb, 1, gfp)))
 			break;
 
@@ -2974,6 +2987,7 @@ void __tcp_push_pending_frames(struct sock *sk, unsigned int cur_mss,
 	if (unlikely(sk->sk_state == TCP_CLOSE))
 		return;
 
+	// 
 	if (tcp_write_xmit(sk, cur_mss, nonagle, 0,
 			   sk_gfp_mask(sk, GFP_ATOMIC)))
 		tcp_check_probe_timer(sk);
@@ -2988,6 +3002,7 @@ void tcp_push_one(struct sock *sk, unsigned int mss_now)
 
 	BUG_ON(!skb || skb->len < mss_now);
 
+	//
 	tcp_write_xmit(sk, mss_now, TCP_NAGLE_PUSH, 1, sk->sk_allocation);
 }
 

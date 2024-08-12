@@ -582,6 +582,7 @@ struct xsk_tx_metadata_compl {
 
 /* This data is invariant across clones and lives at
  * the end of the header data, ie. at skb->end.
+ *
  */
 struct skb_shared_info {
 	__u8		flags;
@@ -851,7 +852,7 @@ typedef unsigned char *sk_buff_data_t;
  *	@users: User count - see {datagram,tcp}.c
  *	@extensions: allocated extensions, valid if active_extensions is nonzero
  */
-
+//
 struct sk_buff {
 	union {
 		struct {
