@@ -115,11 +115,16 @@ int __ip_local_out(struct net *net, struct sock *sk, struct sk_buff *skb)
 
 	skb->protocol = htons(ETH_P_IP);
 
+	// nf：Netfilter（网络过滤器），
+  	// 这是 Linux 内核的一个机制，用于在网络发送和转发的关键节点上加上 hook 函数，这些函数可以截获数据包，对数据包进行干预。
+	// 到这里，网络包马上就要发出去了，因而是 NF_INET_LOCAL_OUT，也即 ouput 链，如果用户曾经在 iptables 里面写过某些规则，就会在 nf_hook 这个函数里面起作用。
+	// dst_output()：
 	return nf_hook(NFPROTO_IPV4, NF_INET_LOCAL_OUT,
 		       net, sk, skb, NULL, skb_dst(skb)->dev,
 		       dst_output);
 }
 
+/* 发送 IP 包 */
 int ip_local_out(struct net *net, struct sock *sk, struct sk_buff *skb)
 {
 	int err;
@@ -195,6 +200,7 @@ int ip_build_and_send_pkt(struct sk_buff *skb, const struct sock *sk,
 }
 EXPORT_SYMBOL_GPL(ip_build_and_send_pkt);
 
+/*  */
 static int ip_finish_output2(struct net *net, struct sock *sk, struct sk_buff *skb)
 {
 	struct dst_entry *dst = skb_dst(skb);
@@ -226,12 +232,15 @@ static int ip_finish_output2(struct net *net, struct sock *sk, struct sk_buff *s
 	}
 
 	rcu_read_lock();
+	//
 	neigh = ip_neigh_for_gw(rt, skb, &is_v6gw);
 	if (!IS_ERR(neigh)) {
 		int res;
 
+		//
 		sock_confirm_neigh(skb, neigh);
 		/* if crossing protocols, can not use the cached header */
+		// 调用 neigh_output 发送网络包.
 		res = neigh_output(neigh, skb, is_v6gw);
 		rcu_read_unlock();
 		return res;
@@ -310,9 +319,11 @@ static int __ip_finish_output(struct net *net, struct sock *sk, struct sk_buff *
 	if (skb->len > mtu || IPCB(skb)->frag_max_size)
 		return ip_fragment(net, sk, skb, mtu, ip_finish_output2);
 
+	// 
 	return ip_finish_output2(net, sk, skb);
 }
 
+/* 从 ip_finish_output 函数开始，发送网络包的逻辑由第三层到达第二层。 */
 static int ip_finish_output(struct net *net, struct sock *sk, struct sk_buff *skb)
 {
 	int ret;
@@ -322,6 +333,7 @@ static int ip_finish_output(struct net *net, struct sock *sk, struct sk_buff *sk
 	case NET_XMIT_SUCCESS:
 		return __ip_finish_output(net, sk, skb);
 	case NET_XMIT_CN:
+		//
 		return __ip_finish_output(net, sk, skb) ? : ret;
 	default:
 		kfree_skb_reason(skb, SKB_DROP_REASON_BPF_CGROUP_EGRESS);
@@ -423,6 +435,7 @@ int ip_mc_output(struct net *net, struct sock *sk, struct sk_buff *skb)
 			    !(IPCB(skb)->flags & IPSKB_REROUTED));
 }
 
+/*  */
 int ip_output(struct net *net, struct sock *sk, struct sk_buff *skb)
 {
 	struct net_device *dev = skb_dst(skb)->dev, *indev = skb->dev;
@@ -430,6 +443,8 @@ int ip_output(struct net *net, struct sock *sk, struct sk_buff *skb)
 	skb->dev = dev;
 	skb->protocol = htons(ETH_P_IP);
 
+	// NF_INET_POST_ROUTING，也即 POSTROUTING 链，
+	// 处理完之后，调用 ip_finish_output。
 	return NF_HOOK_COND(NFPROTO_IPV4, NF_INET_POST_ROUTING,
 			    net, sk, skb, indev, dev,
 			    ip_finish_output,
@@ -453,6 +468,7 @@ static void ip_copy_addrs(struct iphdr *iph, const struct flowi4 *fl4)
 }
 
 /* Note: skb->sk can be different from sk, in case of tunnels */
+/*  */
 int __ip_queue_xmit(struct sock *sk, struct sk_buff *skb, struct flowi *fl,
 		    __u8 tos)
 {
@@ -488,6 +504,7 @@ int __ip_queue_xmit(struct sock *sk, struct sk_buff *skb, struct flowi *fl,
 		 * keep trying until route appears or the connection times
 		 * itself out.
 		 */
+		// 选取路由，也即我要发送这个包应该从哪个网卡出去。
 		rt = ip_route_output_ports(net, fl4, sk,
 					   daddr, inet->inet_saddr,
 					   inet->inet_dport,
@@ -532,6 +549,7 @@ packet_routed:
 	skb->priority = READ_ONCE(sk->sk_priority);
 	skb->mark = READ_ONCE(sk->sk_mark);
 
+	// 发送 IP 包
 	res = ip_local_out(net, sk, skb);
 	rcu_read_unlock();
 	return res;

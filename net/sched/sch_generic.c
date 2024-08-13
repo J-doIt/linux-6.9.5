@@ -340,6 +340,9 @@ bool sch_direct_xmit(struct sk_buff *skb, struct Qdisc *q,
 	if (likely(skb)) {
 		HARD_TX_LOCK(dev, txq, smp_processor_id());
 		if (!netif_xmit_frozen_or_stopped(txq))
+			// 调用 dev_hard_start_xmit 进行发送，
+            // 如果发送不成功，会返回 NETDEV_TX_BUSY。
+            // 这说明网络卡很忙，于是就调用 dev_requeue_skb，重新放入队列。
 			skb = dev_hard_start_xmit(skb, dev, txq, &ret);
 		else
 			qdisc_maybe_clear_missed(q, txq);
@@ -360,6 +363,7 @@ bool sch_direct_xmit(struct sk_buff *skb, struct Qdisc *q,
 			net_warn_ratelimited("BUG %s code %d qlen %d\n",
 					     dev->name, ret, q->q.qlen);
 
+		// 网络卡很忙，调用 dev_requeue_skb，重新放入队列。
 		dev_requeue_skb(skb, q);
 		return false;
 	}
@@ -385,6 +389,8 @@ bool sch_direct_xmit(struct sk_buff *skb, struct Qdisc *q,
  *				0  - queue is empty or throttled.
  *				>0 - queue is not empty.
  *
+ * 
+ * 将网络包从 Qdisc 的队列中拿下来，然后调用 sch_direct_xmit 进行发送。
  */
 static inline bool qdisc_restart(struct Qdisc *q, int *packets)
 {
@@ -395,6 +401,7 @@ static inline bool qdisc_restart(struct Qdisc *q, int *packets)
 	bool validate;
 
 	/* Dequeue packet */
+	// 将网络包从 Qdisc 的队列中拿下来
 	skb = dequeue_skb(q, &validate, packets);
 	if (unlikely(!skb))
 		return false;
@@ -405,6 +412,7 @@ static inline bool qdisc_restart(struct Qdisc *q, int *packets)
 	dev = qdisc_dev(q);
 	txq = skb_get_tx_queue(dev, skb);
 
+	// 发送网络包
 	return sch_direct_xmit(skb, q, dev, txq, root_lock, validate);
 }
 
@@ -413,12 +421,15 @@ void __qdisc_run(struct Qdisc *q)
 	int quota = READ_ONCE(net_hotdata.dev_tx_weight);
 	int packets;
 
+	// qdisc_restart：发送数据
 	while (qdisc_restart(q, &packets)) {
 		quota -= packets;
 		if (quota <= 0) {
 			if (q->flags & TCQ_F_NOLOCK)
 				set_bit(__QDISC_STATE_MISSED, &q->state);
 			else
+				// qdisc 的另一个功能是用于控制网络包的发送速度，
+				// 因而如果超过速度，就需要重新调度，则会调用 __netif_schedule。
 				__netif_schedule(q);
 
 			break;

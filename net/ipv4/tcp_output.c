@@ -1464,6 +1464,7 @@ static int __tcp_transmit_skb(struct sock *sk, struct sk_buff *skb,
 
 	tcp_add_tx_delay(skb, tp);
 
+	// ip_queue_xmit：进入 IP 层的发送逻辑
 	err = INDIRECT_CALL_INET(icsk->icsk_af_ops->queue_xmit,
 				 inet6_csk_xmit, ip_queue_xmit,
 				 sk, skb, &inet->cork.fl);

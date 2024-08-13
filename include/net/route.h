@@ -139,6 +139,7 @@ struct rtable *ip_route_output_key_hash_rcu(struct net *net, struct flowi4 *flp,
 static inline struct rtable *__ip_route_output_key(struct net *net,
 						   struct flowi4 *flp)
 {
+	// ip_route_output_key_hash:
 	return ip_route_output_key_hash(net, flp, NULL);
 }
 
@@ -176,6 +177,7 @@ static inline struct rtable *ip_route_output_ports(struct net *net, struct flowi
 			   daddr, saddr, dport, sport, sock_net_uid(net, sk));
 	if (sk)
 		security_sk_classify_flow(sk, flowi4_to_flowi_common(fl4));
+	// ip_route_output_flow:
 	return ip_route_output_flow(net, fl4, sk);
 }
 
@@ -373,6 +375,7 @@ static inline struct neighbour *ip_neigh_gw4(struct net_device *dev,
 
 	neigh = __ipv4_neigh_lookup_noref(dev, (__force u32)daddr);
 	if (unlikely(!neigh))
+		//
 		neigh = __neigh_create(&arp_tbl, &daddr, dev, false);
 
 	return neigh;
@@ -386,6 +389,7 @@ static inline struct neighbour *ip_neigh_for_gw(struct rtable *rt,
 	struct neighbour *neigh;
 
 	if (likely(rt->rt_gw_family == AF_INET)) {
+		//
 		neigh = ip_neigh_gw4(dev, rt->rt_gw4);
 	} else if (rt->rt_gw_family == AF_INET6) {
 		neigh = ip_neigh_gw6(dev, &rt->rt_gw6);

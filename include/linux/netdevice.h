@@ -4895,6 +4895,7 @@ static inline ktime_t netdev_get_tstamp(struct net_device *dev,
 	return hwtstamps->hwtstamp;
 }
 
+/*  */
 static inline netdev_tx_t __netdev_start_xmit(const struct net_device_ops *ops,
 					      struct sk_buff *skb, struct net_device *dev,
 					      bool more)
@@ -4914,6 +4915,7 @@ static inline netdev_tx_t netdev_start_xmit(struct sk_buff *skb, struct net_devi
 	const struct net_device_ops *ops = dev->netdev_ops;
 	netdev_tx_t rc;
 
+	//
 	rc = __netdev_start_xmit(ops, skb, dev, more);
 	if (rc == NETDEV_TX_OK)
 		txq_trans_update(txq);

@@ -3077,6 +3077,7 @@ static void __netif_reschedule(struct Qdisc *q)
 	q->next_sched = NULL;
 	*sd->output_queue_tailp = q;
 	sd->output_queue_tailp = &q->next_sched;
+	// 发起一个软中断 NET_TX_SOFTIRQ
 	raise_softirq_irqoff(NET_TX_SOFTIRQ);
 	local_irq_restore(flags);
 }
@@ -3084,6 +3085,7 @@ static void __netif_reschedule(struct Qdisc *q)
 void __netif_schedule(struct Qdisc *q)
 {
 	if (!test_and_set_bit(__QDISC_STATE_SCHED, &q->state))
+		//
 		__netif_reschedule(q);
 }
 EXPORT_SYMBOL(__netif_schedule);
@@ -3528,6 +3530,7 @@ static int xmit_one(struct sk_buff *skb, struct net_device *dev,
 
 	len = skb->len;
 	trace_net_dev_start_xmit(skb, dev);
+	//
 	rc = netdev_start_xmit(skb, dev, txq, more);
 	trace_net_dev_xmit(skb, rc, dev, len);
 
@@ -3541,9 +3544,11 @@ struct sk_buff *dev_hard_start_xmit(struct sk_buff *first, struct net_device *de
 	int rc = NETDEV_TX_OK;
 
 	while (skb) {
+		// 每次在队列中取出一个 sk_buff，
 		struct sk_buff *next = skb->next;
 
 		skb_mark_not_on_list(skb);
+		// 调用 xmit_one 发送。
 		rc = xmit_one(skb, dev, txq, next != NULL);
 		if (unlikely(!dev_xmit_complete(rc))) {
 			skb->next = next;
@@ -3723,12 +3728,14 @@ static int dev_qdisc_enqueue(struct sk_buff *skb, struct Qdisc *q,
 {
 	int rc;
 
+	// 将请求放入队列
 	rc = q->enqueue(skb, q, to_free) & NET_XMIT_MASK;
 	if (rc == NET_XMIT_SUCCESS)
 		trace_qdisc_enqueue(q, txq, skb);
 	return rc;
 }
 
+/*  */
 static inline int __dev_xmit_skb(struct sk_buff *skb, struct Qdisc *q,
 				 struct net_device *dev,
 				 struct netdev_queue *txq)
@@ -3749,7 +3756,9 @@ static inline int __dev_xmit_skb(struct sk_buff *skb, struct Qdisc *q,
 			 * of q->seqlock to protect from racing with requeuing.
 			 */
 			if (unlikely(!nolock_qdisc_is_empty(q))) {
+				// 将请求放入队列
 				rc = dev_qdisc_enqueue(skb, q, &to_free, txq);
+				// 处理队列中的数据
 				__qdisc_run(q);
 				qdisc_run_end(q);
 
@@ -4249,8 +4258,8 @@ struct netdev_queue *netdev_core_pick_tx(struct net_device *dev,
 int __dev_queue_xmit(struct sk_buff *skb, struct net_device *sb_dev)
 {
 	struct net_device *dev = skb->dev;
-	struct netdev_queue *txq = NULL;
-	struct Qdisc *q;
+	struct netdev_queue *txq = NULL; // 发送队列：netdev_queue
+	struct Qdisc *q; // 排队规则：Qdisc
 	int rc = -ENOMEM;
 	bool again = false;
 
@@ -4298,12 +4307,15 @@ int __dev_queue_xmit(struct sk_buff *skb, struct net_device *sb_dev)
 		skb_dst_force(skb);
 
 	if (!txq)
+		// 
 		txq = netdev_core_pick_tx(dev, skb, sb_dev);
 
+	//
 	q = rcu_dereference_bh(txq->qdisc);
 
 	trace_net_dev_queue(skb);
 	if (q->enqueue) {
+		// 网络包发送
 		rc = __dev_xmit_skb(skb, q, dev, txq);
 		goto out;
 	}
@@ -5131,6 +5143,7 @@ int netif_rx(struct sk_buff *skb)
 }
 EXPORT_SYMBOL(netif_rx);
 
+/* 发送网络包 */
 static __latent_entropy void net_tx_action(struct softirq_action *h)
 {
 	struct softnet_data *sd = this_cpu_ptr(&softnet_data);
@@ -5203,6 +5216,7 @@ static __latent_entropy void net_tx_action(struct softirq_action *h)
 			}
 
 			clear_bit(__QDISC_STATE_SCHED, &q->state);
+			// 
 			qdisc_run(q);
 			if (root_lock)
 				spin_unlock(root_lock);
@@ -11805,7 +11819,9 @@ static int __init net_dev_init(void)
 	if (register_pernet_device(&default_device_ops))
 		goto out;
 
+	// NET_TX_SOFTIRQ 的处理函数是 net_tx_action，用于发送网络包。
 	open_softirq(NET_TX_SOFTIRQ, net_tx_action);
+	// NET_RX_SOFTIRQ 的处理函数是 net_rx_action，用于接收网络包。
 	open_softirq(NET_RX_SOFTIRQ, net_rx_action);
 
 	rc = cpuhp_setup_state_nocalls(CPUHP_NET_DEV_DEAD, "net/dev:dead",

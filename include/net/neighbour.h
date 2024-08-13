@@ -463,6 +463,7 @@ static __always_inline int neigh_event_send_probe(struct neighbour *neigh,
 	if (READ_ONCE(neigh->used) != now)
 		WRITE_ONCE(neigh->used, now);
 	if (!(READ_ONCE(neigh->nud_state) & (NUD_CONNECTED | NUD_DELAY | NUD_PROBE)))
+		//
 		return __neigh_event_send(neigh, skb, immediate_ok);
 	return 0;
 }
@@ -539,6 +540,7 @@ static inline int neigh_output(struct neighbour *n, struct sk_buff *skb,
 	    READ_ONCE(hh->hh_len))
 		return neigh_hh_output(hh, skb);
 
+	// 对于 struct neighbour 的操作函数 arp_hh_ops 的定义，output 调用的是 neigh_resolve_output。
 	return READ_ONCE(n->output)(n, skb);
 }
 

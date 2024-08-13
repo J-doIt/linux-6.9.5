@@ -135,6 +135,7 @@ static const struct neigh_ops arp_generic_ops = {
 	.connected_output =	neigh_connected_output,
 };
 
+/*  */
 static const struct neigh_ops arp_hh_ops = {
 	.family =		AF_INET,
 	.solicit =		arp_solicit,
@@ -297,7 +298,7 @@ static void arp_error_report(struct neighbour *neigh, struct sk_buff *skb)
 	kfree_skb_reason(skb, SKB_DROP_REASON_NEIGH_FAILED);
 }
 
-/* Create and send an arp packet. */
+/* Create and send an arp packet.（创建并发送arp报文。） */
 static void arp_send_dst(int type, int ptype, __be32 dest_ip,
 			 struct net_device *dev, __be32 src_ip,
 			 const unsigned char *dest_hw,
@@ -311,12 +312,15 @@ static void arp_send_dst(int type, int ptype, __be32 dest_ip,
 	if (dev->flags & IFF_NOARP)
 		return;
 
+	// 创建一个 arp 包
 	skb = arp_create(type, ptype, dest_ip, dev, src_ip,
 			 dest_hw, src_hw, target_hw);
 	if (!skb)
 		return;
 
+	// 得到结果放在 struct dst_entry 里面。
 	skb_dst_set(skb, dst_clone(dst));
+	// 发送 arp 包.
 	arp_xmit(skb);
 }
 
@@ -330,6 +334,7 @@ void arp_send(int type, int ptype, __be32 dest_ip,
 }
 EXPORT_SYMBOL(arp_send);
 
+/*  */
 static void arp_solicit(struct neighbour *neigh, struct sk_buff *skb)
 {
 	__be32 saddr = 0;
@@ -389,6 +394,7 @@ static void arp_solicit(struct neighbour *neigh, struct sk_buff *skb)
 
 	if (skb && !(dev->priv_flags & IFF_XMIT_DST_RELEASE))
 		dst = skb_dst(skb);
+	// 
 	arp_send_dst(ARPOP_REQUEST, ETH_P_ARP, target, dev, saddr,
 		     dst_hw, dev->dev_addr, NULL, dst);
 }

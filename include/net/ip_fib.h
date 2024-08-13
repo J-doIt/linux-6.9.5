@@ -308,6 +308,7 @@ static inline struct fib_table *fib_new_table(struct net *net, u32 id)
 	return fib_get_table(net, id);
 }
 
+/*  */
 static inline int fib_lookup(struct net *net, const struct flowi4 *flp,
 			     struct fib_result *res, unsigned int flags)
 {
@@ -316,8 +317,10 @@ static inline int fib_lookup(struct net *net, const struct flowi4 *flp,
 
 	rcu_read_lock();
 
+	// 获取路由主表
 	tb = fib_get_table(net, RT_TABLE_MAIN);
 	if (tb)
+		// 在这个路由主表里面进行查找，找到了路由，就知道了应该从哪个网卡发出去。
 		err = fib_table_lookup(tb, flp, res, flags | FIB_LOOKUP_NOREF);
 
 	if (err == -EAGAIN)

@@ -466,6 +466,7 @@ int neigh_ifdown(struct neigh_table *tbl, struct net_device *dev)
 }
 EXPORT_SYMBOL(neigh_ifdown);
 
+/*  */
 static struct neighbour *neigh_alloc(struct neigh_table *tbl,
 				     struct net_device *dev,
 				     u32 flags, bool exempt_from_gc)
@@ -491,10 +492,12 @@ static struct neighbour *neigh_alloc(struct neigh_table *tbl,
 	}
 
 do_alloc:
+	// 先分配一个 struct neighbour 结构并且初始化
 	n = kzalloc(tbl->entry_size + dev->neigh_priv_len, GFP_ATOMIC);
 	if (!n)
 		goto out_entries;
 
+	// arp_queue，所以上层想通过 ARP 获取 MAC 地址的任务，都放在这个队列里面
 	__skb_queue_head_init(&n->arp_queue);
 	rwlock_init(&n->lock);
 	seqlock_init(&n->ha_lock);
@@ -504,6 +507,7 @@ do_alloc:
 	n->flags	  = flags;
 	seqlock_init(&n->hh.hh_lock);
 	n->parms	  = neigh_parms_clone(&tbl->parms);
+	// timer 定时器，我们设置成，过一段时间就调用 neigh_timer_handler，来处理这些 ARP 任务。
 	timer_setup(&n->timer, neigh_timer_handler, 0);
 
 	NEIGH_CACHE_STAT_INC(tbl, allocs);
@@ -635,6 +639,7 @@ struct neighbour *neigh_lookup(struct neigh_table *tbl, const void *pkey,
 }
 EXPORT_SYMBOL(neigh_lookup);
 
+/*  */
 static struct neighbour *
 ___neigh_create(struct neigh_table *tbl, const void *pkey,
 		struct net_device *dev, u32 flags,
@@ -645,6 +650,7 @@ ___neigh_create(struct neigh_table *tbl, const void *pkey,
 	struct neigh_hash_table *nht;
 	int error;
 
+	// 
 	n = neigh_alloc(tbl, dev, flags, exempt_from_gc);
 	trace_neigh_create(tbl, dev, pkey, n, exempt_from_gc);
 	if (!n) {
@@ -657,6 +663,7 @@ ___neigh_create(struct neigh_table *tbl, const void *pkey,
 	netdev_hold(dev, &n->dev_tracker, GFP_ATOMIC);
 
 	/* Protocol specific setup. */
+	// 调用了 arp_tbl 的 constructor 函数，也即调用了 arp_constructor，在这里面定义了 ARP 的操作 arp_hh_ops。
 	if (tbl->constructor &&	(error = tbl->constructor(n)) < 0) {
 		rc = ERR_PTR(error);
 		goto out_neigh_release;
@@ -683,6 +690,9 @@ ___neigh_create(struct neigh_table *tbl, const void *pkey,
 	nht = rcu_dereference_protected(tbl->nht,
 					lockdep_is_held(&tbl->lock));
 
+	// 将创建的 struct neighbour 结构放入一个哈希表，
+	// 这是一个数组加链表的链式哈希表，先计算出哈希值 hash_val，得到相应的链表，
+	// 然后循环这个链表找到对应的项，如果找不到就在最后插入一项。
 	if (atomic_read(&tbl->entries) > (1 << nht->hash_shift))
 		nht = neigh_hash_grow(tbl, nht->hash_shift + 1);
 
@@ -1066,12 +1076,14 @@ static void neigh_invalidate(struct neighbour *neigh)
 static void neigh_probe(struct neighbour *neigh)
 	__releases(neigh->lock)
 {
+	// 从 arp_queue 中拿出 ARP 包来，
 	struct sk_buff *skb = skb_peek_tail(&neigh->arp_queue);
 	/* keep skb alive even if arp_queue overflows */
 	if (skb)
 		skb = skb_clone(skb, GFP_ATOMIC);
 	write_unlock(&neigh->lock);
 	if (neigh->ops->solicit)
+		// 然后调用 struct neighbour 的 solicit 操作。
 		neigh->ops->solicit(neigh, skb);
 	atomic_inc(&neigh->probes);
 	consume_skb(skb);
@@ -1168,6 +1180,13 @@ out:
 	neigh_release(neigh);
 }
 
+/* 在 __neigh_event_send 中，激活 ARP 分两种情况，
+	第一种情况是马上激活，也即 immediate_probe 。
+	另一种情况是延迟激活则仅仅设置一个 timer。 
+    
+    如果马上激活，就直接调用 neigh_probe ；
+    如果延迟激活，则定时器到了就会触发 neigh_timer_handler，在这里面还是会调用 neigh_probe 。
+*/
 int __neigh_event_send(struct neighbour *neigh, struct sk_buff *skb,
 		       const bool immediate_ok)
 {
@@ -1239,6 +1258,7 @@ int __neigh_event_send(struct neighbour *neigh, struct sk_buff *skb,
 	}
 out_unlock_bh:
 	if (immediate_probe)
+		// 马上激活
 		neigh_probe(neigh);
 	else
 		write_unlock(&neigh->lock);
@@ -1540,10 +1560,12 @@ static void neigh_hh_init(struct neighbour *n)
 
 /* Slow and careful. */
 
+/*  */
 int neigh_resolve_output(struct neighbour *neigh, struct sk_buff *skb)
 {
 	int rc = 0;
 
+	// 首先 neigh_event_send 触发一个事件，看能否激活 ARP。
 	if (!neigh_event_send(neigh, skb)) {
 		int err;
 		struct net_device *dev = neigh->dev;
@@ -1560,6 +1582,7 @@ int neigh_resolve_output(struct neighbour *neigh, struct sk_buff *skb)
 		} while (read_seqretry(&neigh->ha_lock, seq));
 
 		if (err >= 0)
+			// 当 ARP 发送完毕，就可以调用 dev_queue_xmit 发送二层网络包了。
 			rc = dev_queue_xmit(skb);
 		else
 			goto out_kfree_skb;

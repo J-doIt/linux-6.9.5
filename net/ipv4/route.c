@@ -1616,6 +1616,7 @@ static void rt_set_nexthop(struct rtable *rt, __be32 daddr,
 #endif
 }
 
+/*  */
 struct rtable *rt_dst_alloc(struct net_device *dev,
 			    unsigned int flags, u16 type,
 			    bool noxfrm)
@@ -2493,6 +2494,7 @@ int ip_route_input_noref(struct sk_buff *skb, __be32 daddr, __be32 saddr,
 EXPORT_SYMBOL(ip_route_input_noref);
 
 /* called with rcu_read_lock() */
+/*  */
 static struct rtable *__mkroute_output(const struct fib_result *res,
 				       const struct flowi4 *fl4, int orig_oif,
 				       struct net_device *dev_out,
@@ -2502,7 +2504,7 @@ static struct rtable *__mkroute_output(const struct fib_result *res,
 	struct fib_nh_exception *fnhe;
 	struct in_device *in_dev;
 	u16 type = res->type;
-	struct rtable *rth;
+	struct rtable *rth; // rtable
 	bool do_cache;
 
 	in_dev = __in_dev_get_rcu(dev_out);
@@ -2583,6 +2585,7 @@ static struct rtable *__mkroute_output(const struct fib_result *res,
 	}
 
 add:
+	// 为 rtable 分配内存
 	rth = rt_dst_alloc(dev_out, flags, type,
 			   IN_DEV_ORCONF(in_dev, NOXFRM));
 	if (!rth)
@@ -2634,6 +2637,7 @@ struct rtable *ip_route_output_key_hash(struct net *net, struct flowi4 *fl4,
 	ip_rt_fix_tos(fl4);
 
 	rcu_read_lock();
+	// ip_route_output_key_hash_rcu:
 	rth = ip_route_output_key_hash_rcu(net, fl4, &res, skb);
 	rcu_read_unlock();
 
@@ -2641,6 +2645,7 @@ struct rtable *ip_route_output_key_hash(struct net *net, struct flowi4 *fl4,
 }
 EXPORT_SYMBOL_GPL(ip_route_output_key_hash);
 
+/*  */
 struct rtable *ip_route_output_key_hash_rcu(struct net *net, struct flowi4 *fl4,
 					    struct fib_result *res,
 					    const struct sk_buff *skb)
@@ -2744,6 +2749,7 @@ struct rtable *ip_route_output_key_hash_rcu(struct net *net, struct flowi4 *fl4,
 		goto make_route;
 	}
 
+	// fib_lookup:
 	err = fib_lookup(net, fl4, res, 0);
 	if (err) {
 		res->fi = NULL;
@@ -2805,6 +2811,7 @@ struct rtable *ip_route_output_key_hash_rcu(struct net *net, struct flowi4 *fl4,
 	dev_out = FIB_RES_DEV(*res);
 
 make_route:
+	// 调用 __mkroute_output，创建一个 struct rtable，表示找到的路由表项。这个结构是由 rt_dst_alloc 函数分配的。
 	rth = __mkroute_output(res, fl4, orig_oif, dev_out, flags);
 
 out:
@@ -2862,6 +2869,7 @@ struct dst_entry *ipv4_blackhole_route(struct net *net, struct dst_entry *dst_or
 struct rtable *ip_route_output_flow(struct net *net, struct flowi4 *flp4,
 				    const struct sock *sk)
 {
+	// __ip_route_output_key:
 	struct rtable *rt = __ip_route_output_key(net, flp4);
 
 	if (IS_ERR(rt))

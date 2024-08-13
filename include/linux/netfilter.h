@@ -430,6 +430,7 @@ NF_HOOK_LIST(uint8_t pf, unsigned int hook, struct net *net, struct sock *sk,
 	/* nothing to do */
 }
 
+/*  */
 static inline int nf_hook(u_int8_t pf, unsigned int hook, struct net *net,
 			  struct sock *sk, struct sk_buff *skb,
 			  struct net_device *indev, struct net_device *outdev,
