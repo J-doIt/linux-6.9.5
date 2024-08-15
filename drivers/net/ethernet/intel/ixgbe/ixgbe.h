@@ -349,6 +349,7 @@ struct ixgbe_fwd_adapter {
 	set_bit(__IXGBE_TX_XDP_RING, &(ring)->state)
 #define clear_ring_xdp(ring) \
 	clear_bit(__IXGBE_TX_XDP_RING, &(ring)->state)
+// 用于处理数据包的Rx描述符环
 struct ixgbe_ring {
 	struct ixgbe_ring *next;	/* pointer to next ring in q_vector */
 	struct ixgbe_q_vector *q_vector; /* backpointer to host q_vector */
@@ -358,7 +359,7 @@ struct ixgbe_ring {
 	void *desc;			/* descriptor ring memory */
 	union {
 		struct ixgbe_tx_buffer *tx_buffer_info;
-		struct ixgbe_rx_buffer *rx_buffer_info;
+		struct ixgbe_rx_buffer *rx_buffer_info; // 存放的是网络包的内容
 	};
 	unsigned long state;
 	u8 __iomem *tail;

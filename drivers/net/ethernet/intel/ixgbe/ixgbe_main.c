@@ -2306,7 +2306,7 @@ static void ixgbe_rx_buffer_flip(struct ixgbe_ring *rx_ring,
 /**
  * ixgbe_clean_rx_irq - Clean completed descriptors from Rx ring - bounce buf
  * @q_vector: structure containing interrupt and ring information
- * @rx_ring: rx descriptor ring to transact packets on
+ * @rx_ring: rx descriptor ring to transact packets on（用于处理数据包的Rx描述符环）
  * @budget: Total limit on number of packets to process
  *
  * This function provides a "bounce buffer" approach to Rx interrupt
@@ -2315,6 +2315,7 @@ static void ixgbe_rx_buffer_flip(struct ixgbe_ring *rx_ring,
  * it by maintaining the mapping of the page to the syste.
  *
  * Returns amount of work completed
+ * 
  **/
 static int ixgbe_clean_rx_irq(struct ixgbe_q_vector *q_vector,
 			       struct ixgbe_ring *rx_ring,
@@ -3164,6 +3165,7 @@ static irqreturn_t ixgbe_msix_clean_rings(int irq, void *data)
  * @budget: how many packets driver is allowed to clean
  *
  * This function is used for legacy and MSI, NAPI mode
+ * 
  **/
 int ixgbe_poll(struct napi_struct *napi, int budget)
 {
@@ -5777,6 +5779,7 @@ void ixgbe_reinit_locked(struct ixgbe_adapter *adapter)
 	clear_bit(__IXGBE_RESETTING, &adapter->state);
 }
 
+/*  */
 void ixgbe_up(struct ixgbe_adapter *adapter)
 {
 	/* hardware has been reset, we need to reload some things */
@@ -10877,6 +10880,7 @@ static int ixgbe_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 #endif
 	}
 
+	// 创建一个 struct net_device 表示这个网络设备
 	netdev = alloc_etherdev_mq(sizeof(struct ixgbe_adapter), indices);
 	if (!netdev) {
 		err = -ENOMEM;
@@ -11593,7 +11597,7 @@ static SIMPLE_DEV_PM_OPS(ixgbe_pm_ops, ixgbe_suspend, ixgbe_resume);
 static struct pci_driver ixgbe_driver = {
 	.name      = ixgbe_driver_name,
 	.id_table  = ixgbe_pci_tbl,
-	.probe     = ixgbe_probe,
+	.probe     = ixgbe_probe, //
 	.remove    = ixgbe_remove,
 	.driver.pm = &ixgbe_pm_ops,
 	.shutdown  = ixgbe_shutdown,
@@ -11606,6 +11610,7 @@ static struct pci_driver ixgbe_driver = {
  *
  * ixgbe_init_module is the first routine called when the driver is
  * loaded. All it does is register with the PCI subsystem.
+ * 
  **/
 static int __init ixgbe_init_module(void)
 {
@@ -11621,6 +11626,7 @@ static int __init ixgbe_init_module(void)
 
 	ixgbe_dbg_init();
 
+	// 注册一个驱动
 	ret = pci_register_driver(&ixgbe_driver);
 	if (ret) {
 		destroy_workqueue(ixgbe_wq);
@@ -11635,6 +11641,7 @@ static int __init ixgbe_init_module(void)
 	return 0;
 }
 
+// 
 module_init(ixgbe_init_module);
 
 /**

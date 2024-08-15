@@ -5342,6 +5342,11 @@ static inline int nf_ingress(struct sk_buff *skb, struct packet_type **pt_prev,
 	return 0;
 }
 
+/// @brief 
+/// @param pskb sk_buff：在网络包 struct sk_buff 里面，二层的头里面有一个 protocol，表示里面一层，也即三层是什么协议。
+/// @param pfmemalloc 
+/// @param ppt_prev 
+/// @return 
 static int __netif_receive_skb_core(struct sk_buff **pskb, bool pfmemalloc,
 				    struct packet_type **ppt_prev)
 {
@@ -5505,6 +5510,7 @@ check_vlan_id:
 	type = skb->protocol;
 
 	/* deliver only exact match when indicated */
+	// deliver_ptype_list_skb 在一个协议列表中逐个匹配。如果能够匹配到，就返回。
 	if (likely(!deliver_exact)) {
 		deliver_ptype_list_skb(skb, &pt_prev, orig_dev, type,
 				       &ptype_base[ntohs(type) &
