@@ -159,7 +159,7 @@ static size_t initargs_offs;
 #endif
 
 static char *execute_command;
-static char *ramdisk_execute_command = "/init";
+static char *ramdisk_execute_command = "/init"; // 文件
 
 /*
  * Used to generate warnings if static_key manipulation functions are used
@@ -690,6 +690,7 @@ static void __init setup_command_line(char *command_line)
 
 static __initdata DECLARE_COMPLETION(kthreadd_done);
 
+/* 其他初始化 */
 static noinline void __ref __noreturn rest_init(void)
 {
 	struct task_struct *tsk;
@@ -700,6 +701,8 @@ static noinline void __ref __noreturn rest_init(void)
 	 * We need to spawn init first so that it obtains pid 1, however
 	 * the init task will end up wanting to create kthreads, which, if
 	 * we schedule it before we create kthreadd, will OOPS.
+	 * （我们需要首先生成init，以便它获得pid 1，但是init任务最终会想要创建kthread，如果我们在创建kthread之前调度它，它将会oop。）
+	 * 1号进程
 	 */
 	pid = user_mode_thread(kernel_init, NULL, CLONE_FS);
 	/*
@@ -714,6 +717,7 @@ static noinline void __ref __noreturn rest_init(void)
 	rcu_read_unlock();
 
 	numa_default_policy();
+	// 2号进程
 	pid = kernel_thread(kthreadd, NULL, NULL, CLONE_FS | CLONE_FILES);
 	rcu_read_lock();
 	kthreadd_task = find_task_by_pid_ns(pid, &init_pid_ns);
@@ -878,12 +882,14 @@ static void __init print_unknown_bootoptions(void)
 	memblock_free(unknown_options, len);
 }
 
+/* 内核启动 */
 asmlinkage __visible __init __no_sanitize_address __noreturn __no_stack_protector
 void start_kernel(void)
 {
 	char *command_line;
 	char *after_dashes;
 
+	// &init_task: 这是指向内核初始化任务（也称为idle任务或0号进程）的task_struct结构体的指针。
 	set_task_stack_end_magic(&init_task);
 	smp_setup_processor_id();
 	debug_objects_early_init();
@@ -896,7 +902,7 @@ void start_kernel(void)
 
 	/*
 	 * Interrupts are still disabled. Do necessary setups, then
-	 * enable them.
+	 * enable them.（中断仍然是禁用的。进行必要的设置，然后启用它们。）
 	 */
 	boot_cpu_init();
 	page_address_init();
@@ -926,28 +932,31 @@ void start_kernel(void)
 		parse_args("Setting extra init args", extra_init_args,
 			   NULL, 0, -1, -1, NULL, set_init_arg);
 
-	/* Architectural and non-timekeeping rng init, before allocator init */
+	/* Architectural and non-timekeeping rng init, before allocator init（在分配器初始化之前，Architectural 和 non-timekeeping 的循环初始化） */
 	random_init_early(command_line);
 
 	/*
 	 * These use large bootmem allocations and must precede
-	 * initalization of page allocator
+	 * initalization of page allocator（它们使用较大的引导分配，并且必须先于页分配器的初始化）
 	 */
 	setup_log_buf(0);
 	vfs_caches_init_early();
 	sort_main_extable();
+	// 系统调用初始化
 	trap_init();
+	// 内存管理初始化
 	mm_core_init();
 	poking_init();
 	ftrace_init();
 
-	/* trace_printk can be enabled here */
+	/* trace_printk can be enabled here（可以在这里启用Trace_printk） */
 	early_trace_init();
 
 	/*
 	 * Set up the scheduler prior starting any interrupts (such as the
 	 * timer interrupt). Full topology setup happens at smp_init()
 	 * time - but meanwhile we still have a functioning scheduler.
+	 * （在启动任何中断(如定时器中断)之前设置调度器。完整的拓扑设置发生在smp_init()时间-但同时我们仍然有一个正常运行的调度器。）
 	 */
 	sched_init();
 
@@ -1078,6 +1087,7 @@ void start_kernel(void)
 	kcsan_init();
 
 	/* Do the rest non-__init'ed, we're now alive */
+	// 其他初始化（eg：1号进程、2号进程）
 	rest_init();
 
 	/*
@@ -1351,6 +1361,7 @@ static void __init do_pre_smp_initcalls(void)
 		do_one_initcall(initcall_from_entry(fn));
 }
 
+/* 运行初始化程序 */
 static int run_init_process(const char *init_filename)
 {
 	const char *const *p;
@@ -1363,6 +1374,7 @@ static int run_init_process(const char *init_filename)
 	pr_debug("  with environment:\n");
 	for (p = envp_init; *p; p++)
 		pr_debug("    %s\n", *p);
+	// 
 	return kernel_execve(init_filename, argv_init, envp_init);
 }
 
@@ -1432,6 +1444,7 @@ void __weak free_initmem(void)
 	free_initmem_default(POISON_FREE_INITMEM);
 }
 
+/* 初始化1号进程 */
 static int __ref kernel_init(void *unused)
 {
 	int ret;
@@ -1441,6 +1454,7 @@ static int __ref kernel_init(void *unused)
 	 */
 	wait_for_completion(&kthreadd_done);
 
+	// 
 	kernel_init_freeable();
 	/* need to finish all async __init code before freeing the memory */
 	async_synchronize_full();
@@ -1466,7 +1480,9 @@ static int __ref kernel_init(void *unused)
 
 	do_sysctl_args();
 
+	// 
 	if (ramdisk_execute_command) {
+		// 
 		ret = run_init_process(ramdisk_execute_command);
 		if (!ret)
 			return 0;
@@ -1497,6 +1513,7 @@ static int __ref kernel_init(void *unused)
 			return 0;
 	}
 
+	// 1 号进程运行的是一个文件
 	if (!try_to_run_init_process("/sbin/init") ||
 	    !try_to_run_init_process("/etc/init") ||
 	    !try_to_run_init_process("/bin/init") ||

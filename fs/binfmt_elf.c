@@ -98,9 +98,10 @@ static int elf_core_dump(struct coredump_params *cprm);
 #define ELF_PAGEOFFSET(_v) ((_v) & (ELF_MIN_ALIGN-1))
 #define ELF_PAGEALIGN(_v) (((_v) + ELF_MIN_ALIGN - 1) & ~(ELF_MIN_ALIGN - 1))
 
+/* Linux 下一个常用的格式是 ELF（Executable and Linkable Format，可执行与可链接格式） */
 static struct linux_binfmt elf_format = {
 	.module		= THIS_MODULE,
-	.load_binary	= load_elf_binary,
+	.load_binary	= load_elf_binary, // 加载 elf 格式的二进制文件
 	.load_shlib	= load_elf_library,
 #ifdef CONFIG_COREDUMP
 	.core_dump	= elf_core_dump,
@@ -816,6 +817,7 @@ static int parse_elf_properties(struct file *f, const struct elf_phdr *phdr,
 	return ret == -ENOENT ? 0 : ret;
 }
 
+/* 加载 elf 格式的二进制文件 */
 static int load_elf_binary(struct linux_binprm *bprm)
 {
 	struct file *interpreter = NULL; /* to shut gcc up */
@@ -1295,6 +1297,7 @@ out_free_interp:
 #endif
 
 	finalize_exec(bprm);
+	// 
 	START_THREAD(elf_ex, regs, elf_entry, bprm->p);
 	retval = 0;
 out:

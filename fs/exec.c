@@ -1786,6 +1786,7 @@ static int search_binary_handler(struct linux_binprm *bprm)
 			continue;
 		read_unlock(&binfmt_lock);
 
+		// 加载二进制文件
 		retval = fmt->load_binary(bprm);
 
 		read_lock(&binfmt_lock);
@@ -1856,6 +1857,7 @@ static int exec_binprm(struct linux_binprm *bprm)
 	return 0;
 }
 
+/* 准备并执行一个新的二进制程序 */
 static int bprm_execve(struct linux_binprm *bprm)
 {
 	int retval;
@@ -1880,6 +1882,7 @@ static int bprm_execve(struct linux_binprm *bprm)
 	if (retval)
 		goto out;
 
+	//
 	retval = exec_binprm(bprm);
 	if (retval < 0)
 		goto out;
@@ -2000,7 +2003,7 @@ int kernel_execve(const char *kernel_filename,
 		  const char *const *argv, const char *const *envp)
 {
 	struct filename *filename;
-	struct linux_binprm *bprm;
+	struct linux_binprm *bprm; // 此结构用于保存加载二进制文件时使用的参数
 	int fd = AT_FDCWD;
 	int retval;
 
@@ -2012,6 +2015,7 @@ int kernel_execve(const char *kernel_filename,
 	if (IS_ERR(filename))
 		return PTR_ERR(filename);
 
+	// 
 	bprm = alloc_bprm(fd, filename, 0);
 	if (IS_ERR(bprm)) {
 		retval = PTR_ERR(bprm);
@@ -2047,6 +2051,7 @@ int kernel_execve(const char *kernel_filename,
 	if (retval < 0)
 		goto out_free;
 
+	// 准备并执行一个新的二进制程序
 	retval = bprm_execve(bprm);
 out_free:
 	free_bprm(bprm);

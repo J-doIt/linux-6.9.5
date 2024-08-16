@@ -14,6 +14,10 @@ struct coredump_params;
 
 /*
  * This structure is used to hold the arguments that are used when loading binaries.
+ * （此结构用于保存加载二进制文件时使用的参数。）
+ *
+ * 该结构体（通常简称为bprm）在执行新的可执行文件时扮演着核心角色，
+ * 它存储了执行新程序所需的多种参数和信息，比如可执行文件路径、环境变量、命令行参数、权限信息等。
  */
 struct linux_binprm {
 #ifdef CONFIG_MMU
@@ -78,6 +82,7 @@ struct linux_binprm {
 /*
  * This structure defines the functions that are used to load the binary formats that
  * linux accepts.
+ * （这个结构定义了用于加载linux接受的二进制格式的函数。）
  */
 struct linux_binfmt {
 	struct list_head lh;

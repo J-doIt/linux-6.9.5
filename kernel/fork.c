@@ -2583,6 +2583,7 @@ __latent_entropy struct task_struct *copy_process(
 			p->signal->has_child_subreaper = p->real_parent->signal->has_child_subreaper ||
 							 p->real_parent->signal->is_child_subreaper;
 			list_add_tail(&p->sibling, &p->real_parent->children);
+			// 加入task列表
 			list_add_tail_rcu(&p->tasks, &init_task.tasks);
 			attach_pid(p, PIDTYPE_TGID);
 			attach_pid(p, PIDTYPE_PGID);
@@ -2594,6 +2595,7 @@ __latent_entropy struct task_struct *copy_process(
 			atomic_inc(&current->signal->live);
 			refcount_inc(&current->signal->sigcnt);
 			task_join_group_stop(p);
+			// 加入task列表
 			list_add_tail_rcu(&p->thread_node,
 					  &p->signal->thread_head);
 		}
@@ -2794,6 +2796,7 @@ pid_t kernel_clone(struct kernel_clone_args *args)
 			trace = 0;
 	}
 
+	//
 	p = copy_process(NULL, trace, NUMA_NO_NODE, args);
 	add_latent_entropy();
 
@@ -2841,7 +2844,7 @@ pid_t kernel_clone(struct kernel_clone_args *args)
 }
 
 /*
- * Create a kernel thread.
+ * Create a kernel thread.（创建一个内核线程。）
  */
 pid_t kernel_thread(int (*fn)(void *), void *arg, const char *name,
 		    unsigned long flags)
@@ -2860,7 +2863,7 @@ pid_t kernel_thread(int (*fn)(void *), void *arg, const char *name,
 }
 
 /*
- * Create a user mode thread.
+ * Create a user mode thread.（创建一个用户模式线程。）
  */
 pid_t user_mode_thread(int (*fn)(void *), void *arg, unsigned long flags)
 {
